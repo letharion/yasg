@@ -18,12 +18,15 @@ struct Bullet {
     vector_y: f64,
     offset_x: f64,
     offset_y: f64,
+    collision: bool,
 }
 
 struct Planet {
     render: graphics::types::Rectangle,
     x: f64,
     y: f64,
+    size: f64,
+    strength: f64,
 }
 
 pub struct App {
@@ -55,13 +58,15 @@ impl App {
 
             for p in planets {
               let transform = c.transform.trans(p.x, p.y);
-              ellipse(GREY, p.render, transform, gl);
+              let RG = 0.5 - (p.strength / 50.0);
+              let color: [f32; 4] = [ RG as f32, RG as f32, (p.strength / 100.0) as f32, 1.0];
+              ellipse(color, p.render, transform, gl);
             }
         });
 
     }
 
-    fn update(&mut self, args: &UpdateArgs, elapsed: u64) {
+    fn update(&mut self, args: &UpdateArgs) {
         let g = 1.0;
         let m1 = 2.0;
         let m2 = 3.0;
@@ -69,6 +74,7 @@ impl App {
         for pl in self.planets.iter() {
             for pr in &mut self.projectiles {
                 // @TODO Verlet integration.
+                // @TODO Fix proper angle.
                 // Leaving a ^2 from gravity and a .sqrt from
                 // Pythagoras as they cancel eachother out.
                 let distance = (pl.x - pr.offset_x).powi(2) +
@@ -90,11 +96,30 @@ impl App {
             }
         }
 
+        for pl in &mut self.planets {
+            if pl.strength < 100.0 {
+                pl.strength += 1.0 * args.dt;
+            }
+        }
+
         // Move projectiles around
         for pr in &mut self.projectiles {
           pr.offset_x += pr.vector_x;
           pr.offset_y += pr.vector_y;
         }
+
+        // Collision?
+        for pl in self.planets.iter() {
+            for pr in &mut self.projectiles {
+                let distance = ((pl.x - pr.offset_x).powi(2) +
+                                (pl.y - pr.offset_y).powi(2)).sqrt();
+                if (distance < pl.size / 10.0) {
+                    pr.collision = true;
+                }
+            }
+        }
+
+        self.projectiles.retain(|p| p.collision == false);
 
         self.i += 1;
         if self.i % 500 == 0 {
@@ -121,14 +146,6 @@ fn main() {
         .build()
         .unwrap();
 
-    let start_projectiles = Bullet {
-            bullet: graphics::rectangle::square(0.0, 0.0, 10.0),
-            vector_x: 0.0,
-            vector_y: 0.3,
-            offset_x: 120.0,
-            offset_y: 300.0,
-        };
-
     // Create a new game and run it.
     let mut app = App {
         gl: GlGraphics::new(opengl),
@@ -137,19 +154,34 @@ fn main() {
                 render:  graphics::rectangle::square(0.0, 0.0, 50.0),
                 x: 300.0,
                 y: 300.0,
+                size: 50.0,
+                strength: 1.0,
             },
             Planet {
                 render:  graphics::rectangle::square(0.0, 0.0, 50.0),
                 x: 500.0,
                 y: 300.0,
+                size: 50.0,
+                strength: 10.0,
             },
             Planet {
                 render:  graphics::rectangle::square(0.0, 0.0, 50.0),
                 x: 700.0,
                 y: 300.0,
+                size: 50.0,
+                strength: 1.0,
             } ],
         i: 0,
         projectiles: vec![],
+    };
+
+    let start_projectiles = Bullet {
+        bullet: graphics::rectangle::square(0.0, 0.0, 10.0),
+        vector_x: 0.0,
+        vector_y: 0.3,
+        offset_x: 120.0,
+        offset_y: 300.0,
+        collision: false,
     };
     app.projectiles.push(start_projectiles);
     app.projectiles.push(Bullet {
@@ -158,24 +190,36 @@ fn main() {
         vector_y: -0.5,
         offset_x: 400.0,
         offset_y: 300.0,
+        collision: false,
     });
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
         let new_now = Instant::now().duration_since(now);
+        now = Instant::now();
         let elapsed = (new_now.as_secs() * 1000000000) + new_now.subsec_nanos() as u64;
 
         if let Some(Button::Mouse(button)) = e.press_args() {
             println!("Pressed mouse button '{:?}'", button);
             println!("Mouse at '{} {}'", cursor_x, cursor_y);
             // println!("Gravity at '{} {}'", cursor_x, cursor_y);
-            // println!("'{:?}' '{:?}'", 1.0 / (app.x - cursor_x - 25.0), 1.0 / (app.y - cursor_y - 25.0));
+            let g = 1.0;
+            let displacement = (app.planets[0].x - cursor_x + app.planets[0].size / 2.0,
+                                app.planets[0].y - cursor_y + app.planets[0].size / 2.0);
+            let angle = displacement.1.atan2(displacement.0);
+            let distance = displacement.0.powi(2) + displacement.1.powi(2);
+
+            let force = 0.00003;//(g * 2.0 / distance).min(0.00005);
+            let acceleration = (angle.cos() * force * 2.0e4, angle.sin() * force * 2.0e4);
+            let start_offset = (35.0 * angle.cos(), 35.0 * angle.sin());
+
             app.projectiles.push(Bullet {
                 bullet: graphics::rectangle::square(0.0, 0.0, 10.0),
-                vector_x: 0.0,
-                vector_y: -0.5,
-                offset_x: 400.0,
-                offset_y: 300.0,
+                vector_x: acceleration.0,
+                vector_y: acceleration.1,
+                offset_x: app.planets[0].x + start_offset.0 + 25.0,
+                offset_y: app.planets[0].y + start_offset.1 + 25.0,
+                collision: false,
             });
 
 
@@ -190,10 +234,9 @@ fn main() {
         });
 
         if let Some(u) = e.update_args() {
-            //println!("{:?}", elapsed);
-            app.update(&u, elapsed);
+            // println!("{:?}", u);
+            app.update(&u);
         }
-        now = Instant::now();
     }
 }
 
