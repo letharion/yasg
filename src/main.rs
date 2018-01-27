@@ -4,6 +4,7 @@ extern crate glutin_window;
 extern crate opengl_graphics;
 
 use std::time::{Instant};
+use std::f64;
 
 use piston::window::WindowSettings;
 use piston::event_loop::*;
@@ -32,7 +33,7 @@ struct Planet {
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     projectiles: Vec<Bullet>,
-    planets: [Planet; 3],
+    planets: [Planet; 1],
     i: u64,
 }
 
@@ -41,7 +42,7 @@ impl App {
         use graphics::*;
 
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-        const GREY:  [f32; 4] = [0.5, 0.5, 0.5, 1.0];
+        // const GREY:  [f32; 4] = [0.5, 0.5, 0.5, 1.0];
         const BLUE:  [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
         let ref mut planets = self.planets;
@@ -58,8 +59,8 @@ impl App {
 
             for p in planets {
               let transform = c.transform.trans(p.x, p.y);
-              let RG = 0.5 - (p.strength / 50.0);
-              let color: [f32; 4] = [ RG as f32, RG as f32, (p.strength / 100.0) as f32, 1.0];
+              let rg = 0.5 - (p.strength / 50.0);
+              let color: [f32; 4] = [ rg as f32, rg as f32, (p.strength / 100.0) as f32, 1.0];
               ellipse(color, p.render, transform, gl);
             }
         });
@@ -67,7 +68,7 @@ impl App {
     }
 
     fn update(&mut self, args: &UpdateArgs) {
-        let g = 1.0;
+        let g = 0.5;
         let m1 = 2.0;
         let m2 = 3.0;
 
@@ -77,8 +78,8 @@ impl App {
                 // @TODO Fix proper angle.
                 // Leaving a ^2 from gravity and a .sqrt from
                 // Pythagoras as they cancel eachother out.
-                let distance = (pl.x - pr.offset_x).powi(2) +
-                               (pl.y - pr.offset_y).powi(2);
+                let distance = (pl.x + 50.0 - pr.offset_x).powi(2) +
+                               (pl.y + 50.0 - pr.offset_y).powi(2);
                 let force = g * (m1 * m2) / distance;
 
                 if pl.x < pr.offset_x {
@@ -113,7 +114,8 @@ impl App {
             for pr in &mut self.projectiles {
                 let distance = ((pl.x - pr.offset_x).powi(2) +
                                 (pl.y - pr.offset_y).powi(2)).sqrt();
-                if (distance < pl.size / 10.0) {
+                if distance < pl.size / 10.0 {
+                    println!("collision happened");
                     pr.collision = true;
                 }
             }
@@ -157,7 +159,7 @@ fn main() {
                 size: 50.0,
                 strength: 1.0,
             },
-            Planet {
+       /*     Planet {
                 render:  graphics::rectangle::square(0.0, 0.0, 50.0),
                 x: 500.0,
                 y: 300.0,
@@ -170,20 +172,21 @@ fn main() {
                 y: 300.0,
                 size: 50.0,
                 strength: 1.0,
-            } ],
+            }*/
+        ],
         i: 0,
         projectiles: vec![],
     };
 
-    let start_projectiles = Bullet {
+    /*
+    app.projectiles.push(Bullet {
         bullet: graphics::rectangle::square(0.0, 0.0, 10.0),
         vector_x: 0.0,
         vector_y: 0.3,
         offset_x: 120.0,
         offset_y: 300.0,
         collision: false,
-    };
-    app.projectiles.push(start_projectiles);
+    });
     app.projectiles.push(Bullet {
         bullet: graphics::rectangle::square(0.0, 0.0, 10.0),
         vector_x: 0.0,
@@ -191,7 +194,23 @@ fn main() {
         offset_x: 400.0,
         offset_y: 300.0,
         collision: false,
-    });
+    });*/
+
+    let mut f: f64 = 0.0;
+    let n = 9;
+    let r = f64::consts::PI / 180.0;
+    for _ in 1..n {
+        let dist: f64 = 100.0;
+        app.projectiles.push(Bullet {
+            bullet: graphics::rectangle::square(0.0, 0.0, 10.0),
+            vector_x: 0.0,
+            vector_y: 0.0,
+            offset_x: (f * r).cos() * dist + 312.5,
+            offset_y: (f * r).sin() * dist + 312.5,
+            collision: false,
+        });
+        f += 360.0 / (n - 1) as f64;
+    }
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
@@ -203,11 +222,11 @@ fn main() {
             println!("Pressed mouse button '{:?}'", button);
             println!("Mouse at '{} {}'", cursor_x, cursor_y);
             // println!("Gravity at '{} {}'", cursor_x, cursor_y);
-            let g = 1.0;
+            // let g = 1.0;
             let displacement = (app.planets[0].x - cursor_x + app.planets[0].size / 2.0,
                                 app.planets[0].y - cursor_y + app.planets[0].size / 2.0);
             let angle = displacement.1.atan2(displacement.0);
-            let distance = displacement.0.powi(2) + displacement.1.powi(2);
+            // let distance = displacement.0.powi(2) + displacement.1.powi(2);
 
             let force = 0.00003;//(g * 2.0 / distance).min(0.00005);
             let acceleration = (angle.cos() * force * 2.0e4, angle.sin() * force * 2.0e4);
