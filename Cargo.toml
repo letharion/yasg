@@ -4,8 +4,7 @@ version = "0.1.0"
 authors = ["Claes Gyllensvärd <letharion@gmail.com>"]
 
 [dependencies]
-futures = "0.1.18"
-tokio = "0.0.0"
+tungstenite = "0.5.3"
 piston = "0.32.0"
 piston2d-graphics = "0.21.1"
 pistoncore-glutin_window = "0.37.0"

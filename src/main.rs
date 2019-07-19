@@ -2,15 +2,22 @@ extern crate piston;
 extern crate graphics;
 extern crate glutin_window;
 extern crate opengl_graphics;
+extern crate tungstenite;
 
 use std::time::{Instant};
 use std::f64;
+use std::thread;
+use std::sync::mpsc;
 
 use piston::window::WindowSettings;
 use piston::event_loop::*;
 use piston::input::*;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
+
+use std::net::TcpListener;
+use std::thread::spawn;
+use tungstenite::server::accept;
 
 #[derive(Debug)]
 struct Bullet {
@@ -33,7 +40,7 @@ struct Planet {
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     projectiles: Vec<Bullet>,
-    planets: [Planet; 1],
+    planets: Vec<Planet>,
     i: u64,
 }
 
@@ -94,6 +101,9 @@ impl App {
                 else {
                     pr.vector_y += force;
                 }
+
+                pr.offset_x += pr.vector_x;
+                pr.offset_y += pr.vector_y;
             }
         }
 
@@ -101,12 +111,6 @@ impl App {
             if pl.strength < 100.0 {
                 pl.strength += 1.0 * args.dt;
             }
-        }
-
-        // Move projectiles around
-        for pr in &mut self.projectiles {
-          pr.offset_x += pr.vector_x;
-          pr.offset_y += pr.vector_y;
         }
 
         // Collision?
@@ -132,7 +136,31 @@ impl App {
 }
 
 fn main() {
-    let mut now = Instant::now();
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let received = rx.recv().unwrap();
+        println!("{:?}", received);
+        let server = TcpListener::bind("127.0.0.1:9001").unwrap();
+        for stream in server.incoming() {
+            spawn (move || {
+                let mut websocket = accept(stream.unwrap()).unwrap();
+                loop {
+                    let msg = websocket.read_message().unwrap();
+
+                    // We do not want to send back ping/pong messages.
+                    if msg.is_binary() || msg.is_text() {
+                        println!("Pressed mouse button '");
+                        websocket.write_message(msg).unwrap();
+                    }
+                }
+            });
+        }
+    });
+
+    tx.send("A").unwrap();
+
+    //let mut now = Instant::now();
     let opengl = OpenGL::V3_2;
     let mut cursor = [0.0, 0.0];
     let mut cursor_x = 0.0;
@@ -151,7 +179,7 @@ fn main() {
     // Create a new game and run it.
     let mut app = App {
         gl: GlGraphics::new(opengl),
-        planets: [
+        planets: vec!(
             Planet {
                 render:  graphics::rectangle::square(0.0, 0.0, 50.0),
                 x: 300.0,
@@ -173,7 +201,7 @@ fn main() {
                 size: 50.0,
                 strength: 1.0,
             }*/
-        ],
+        ),
         i: 0,
         projectiles: vec![],
     };
@@ -214,10 +242,10 @@ fn main() {
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
-        let new_now = Instant::now().duration_since(now);
+        /*let new_now = Instant::now().duration_since(now);
         now = Instant::now();
         let elapsed = (new_now.as_secs() * 1000000000) + new_now.subsec_nanos() as u64;
-
+*/
         if let Some(Button::Mouse(button)) = e.press_args() {
             println!("Pressed mouse button '{:?}'", button);
             println!("Mouse at '{} {}'", cursor_x, cursor_y);
